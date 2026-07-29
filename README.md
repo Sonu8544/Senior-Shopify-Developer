@@ -8,7 +8,7 @@
 | **Main file** | [`sections/custom-product-info.liquid`](sections/custom-product-info.liquid) |
 | **Lines of code** | ~909 (Liquid + scoped CSS + vanilla JS + JSON schema — single self-contained file) |
 | **Dependencies** | None (no jQuery, no libraries for the section's own logic) |
-| **Approx. time taken** | ~6–7 hours (build + iterations + polish + review) |
+| **Approx. time taken** | ~3-4 hours (build + iterations + polish + review) |
 
 ---
 
