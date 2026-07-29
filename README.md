@@ -63,7 +63,7 @@ The section is **self-contained** — all markup, styles (`{% style %}`) and scr
 |---|:--:|
 | GitHub repo link / ZIP | ⬜ push / zip the repo |
 | Loom video / screenshots | ⬜ record a short walkthrough |
-| Approximate time taken | ✅ ~6–7 hours (noted above) |
+| Approximate time taken | ✅ ~3-4 hours (noted above) |
 
 ---
 
