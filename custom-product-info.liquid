@@ -1,0 +1,909 @@
+{%- comment -%}
+  ============================================================================
+  Custom Product Information Section
+  ----------------------------------------------------------------------------
+  Requirements covered:
+    1. Responsive product information section
+    2. Product Title, Price, Variant Selector, Quantity Selector, Add-to-Cart
+    3. "Why Customers Love This Product" block with exactly 3 bullet points
+    4. Bullet points editable via Section Settings (Shopify Metafields optional)
+  Bonus:
+    - Loading state on Add-to-Cart button
+    - Validation when no variant is selected
+    - Optimised CSS, minimal vanilla JavaScript (no libraries)
+  ============================================================================
+{%- endcomment -%}
+
+{%- liquid
+  assign product = section.settings.product | default: product
+  assign current_variant = product.selected_or_first_available_variant
+-%}
+
+<section
+  class="cpi"
+  id="cpi-{{ section.id }}"
+  data-cpi
+  data-section-id="{{ section.id }}"
+>
+  {%- if product == blank -%}
+    {%- comment -%} Fallback shown inside the theme editor when no product is picked {%- endcomment -%}
+    <div class="cpi__placeholder">
+      {{ 'products.product.select_a_product' | t | default: 'Select a product in the section settings.' }}
+    </div>
+  {%- else -%}
+    <div class="cpi__inner">
+      {%- comment -%} ---------- Media ---------- {%- endcomment -%}
+      <div class="cpi__media">
+        {%- if product.images.size > 0 -%}
+          <div class="cpi__gallery">
+            {%- comment -%} Thumbnails: left column on desktop, bottom row on mobile {%- endcomment -%}
+            {%- if product.images.size > 1 -%}
+              <div class="cpi__thumbs" role="group" aria-label="Product images">
+                {%- for image in product.images -%}
+                  <button
+                    type="button"
+                    class="cpi__thumb{% if forloop.first %} is-active{% endif %}"
+                    data-cpi-thumb
+                    data-cpi-full="{{ image | image_url: width: 900 }}"
+                    data-cpi-full2x="{{ image | image_url: width: 1400 }}"
+                    aria-label="View image {{ forloop.index }}"
+                  >
+                    <img
+                      src="{{ image | image_url: width: 160 }}"
+                      alt="{{ image.alt | escape | default: product.title | escape }}"
+                      width="80" height="80" loading="lazy"
+                    >
+                  </button>
+                {%- endfor -%}
+              </div>
+            {%- endif -%}
+
+            <div class="cpi__stage">
+              <img
+                data-cpi-main
+                src="{{ product.featured_image | image_url: width: 900 }}"
+                srcset="{{ product.featured_image | image_url: width: 700 }} 700w,
+                        {{ product.featured_image | image_url: width: 1400 }} 1400w"
+                sizes="(min-width: 750px) 45vw, 100vw"
+                alt="{{ product.featured_image.alt | escape | default: product.title | escape }}"
+                width="{{ product.featured_image.width }}"
+                height="{{ product.featured_image.height }}"
+              >
+            </div>
+          </div>
+        {%- else -%}
+          <div class="cpi__media-empty">{{ 'general.no_image' | t | default: 'No image' }}</div>
+        {%- endif -%}
+      </div>
+
+      {%- comment -%} ---------- Details ---------- {%- endcomment -%}
+      <div class="cpi__details">
+        {%- comment -%} Requirement: Product Title {%- endcomment -%}
+        <h1 class="cpi__title">{{ product.title }}</h1>
+
+        {%- comment -%} Requirement: Product Price (live-updates with variant) {%- endcomment -%}
+        <div class="cpi__price" data-cpi-price>
+          <span class="cpi__price-current" data-cpi-price-current>{{ current_variant.price | money }}</span>
+        </div>
+
+        <form
+          method="post"
+          action="{{ routes.cart_add_url }}"
+          class="cpi__form"
+          data-cpi-form
+          novalidate
+        >
+          <input type="hidden" name="form_type" value="product">
+          <input type="hidden" name="utf8" value="✓">
+
+          {%- comment -%} Requirement: Variant Selector.
+              Single variant products auto-select their only variant. {%- endcomment -%}
+          {%- if product.has_only_default_variant -%}
+            <input type="hidden" name="id" value="{{ current_variant.id }}" data-cpi-variant-id>
+          {%- else -%}
+            <div class="cpi__variants">
+              {%- for option in product.options_with_values -%}
+                <div class="cpi__option" data-cpi-option-group="{{ forloop.index0 }}">
+                  <span class="cpi__label">
+                    {{ option.name }}:
+                    <span class="cpi__label-value" data-cpi-selected-value="{{ forloop.index0 }}">{{ option.selected_value }}</span>
+                  </span>
+                  <div class="cpi__pills" role="radiogroup" aria-label="{{ option.name | escape }}">
+                    {%- for value in option.values -%}
+                      <button
+                        type="button"
+                        class="cpi__pill{% if option.selected_value == value %} is-selected{% endif %}"
+                        role="radio"
+                        aria-checked="{% if option.selected_value == value %}true{% else %}false{% endif %}"
+                        data-cpi-option-index="{{ forloop.parentloop.index0 }}"
+                        data-cpi-value="{{ value | escape }}"
+                      >{{ value }}</button>
+                    {%- endfor -%}
+                  </div>
+                </div>
+              {%- endfor -%}
+
+              {%- comment -%} Hidden input holding the resolved variant id sent to cart {%- endcomment -%}
+              <select name="id" class="cpi__variant-ids visually-hidden" data-cpi-variant-select aria-hidden="true" tabindex="-1">
+                {%- for variant in product.variants -%}
+                  <option
+                    value="{{ variant.id }}"
+                    {% unless variant.available %}disabled{% endunless %}
+                    {% if variant == current_variant %}selected{% endif %}
+                    data-cpi-option1="{{ variant.option1 | escape }}"
+                    data-cpi-option2="{{ variant.option2 | escape }}"
+                    data-cpi-option3="{{ variant.option3 | escape }}"
+                    data-cpi-price="{{ variant.price | money }}"
+                    data-cpi-available="{{ variant.available }}"
+                  >{{ variant.title }}</option>
+                {%- endfor -%}
+              </select>
+            </div>
+          {%- endif -%}
+
+          {%- comment -%} Requirement: Quantity Selector {%- endcomment -%}
+          <div class="cpi__quantity">
+            <label class="cpi__label" for="cpi-qty-{{ section.id }}">
+              {{ 'products.product.quantity.label' | t | default: 'Quantity' }}
+            </label>
+            <div class="cpi__qty-control">
+              <button type="button" class="cpi__qty-btn" data-cpi-qty-minus aria-label="Decrease quantity">−</button>
+              <input
+                type="number"
+                id="cpi-qty-{{ section.id }}"
+                name="quantity"
+                class="cpi__qty-input"
+                value="1"
+                min="1"
+                inputmode="numeric"
+                data-cpi-qty
+              >
+              <button type="button" class="cpi__qty-btn" data-cpi-qty-plus aria-label="Increase quantity">+</button>
+            </div>
+          </div>
+
+          {%- comment -%} Requirement + Bonus: Add-to-Cart with loading state {%- endcomment -%}
+          <button type="submit" class="cpi__atc" data-cpi-atc {% unless current_variant.available %}disabled{% endunless %}>
+            <span class="cpi__atc-text" data-cpi-atc-text>
+              {%- if current_variant.available -%}
+                {{ 'products.product.add_to_cart' | t | default: 'Add to cart' }}
+              {%- else -%}
+                {{ 'products.product.sold_out' | t | default: 'Sold out' }}
+              {%- endif -%}
+            </span>
+          </button>
+
+          {%- comment -%} Bonus: validation / status message {%- endcomment -%}
+          <p class="cpi__message" data-cpi-message role="status" aria-live="polite"></p>
+        </form>
+
+        {%- comment -%} ---------- Why Customers Love This Product ---------- {%- endcomment -%}
+        {%- comment -%}
+          Editable via Section Settings. If a metafield is configured it wins,
+          otherwise the section-setting text is used.
+        {%- endcomment -%}
+        {%- liquid
+          assign point_1 = section.settings.love_point_1
+          assign point_2 = section.settings.love_point_2
+          assign point_3 = section.settings.love_point_3
+
+          # Metafield source is selectable from the theme editor (namespace + key).
+          assign mf_ns  = section.settings.metafield_namespace | default: 'custom'
+          assign mf_key = section.settings.metafield_key | default: 'love_points'
+          assign love_mf = product.metafields[mf_ns][mf_key]
+          if section.settings.use_metafield and love_mf != blank
+            assign meta_points = love_mf.value
+          endif
+        -%}
+        <div class="cpi__love">
+          <h2 class="cpi__love-title">{{ section.settings.love_title | default: 'Why Customers Love This Product' }}</h2>
+          <ul class="cpi__love-list">
+            {%- if meta_points and meta_points.size > 0 -%}
+              {%- for point in meta_points limit: 3 -%}
+                <li class="cpi__love-item">{{ point }}</li>
+              {%- endfor -%}
+            {%- else -%}
+              {%- if point_1 != blank -%}<li class="cpi__love-item">{{ point_1 }}</li>{%- endif -%}
+              {%- if point_2 != blank -%}<li class="cpi__love-item">{{ point_2 }}</li>{%- endif -%}
+              {%- if point_3 != blank -%}<li class="cpi__love-item">{{ point_3 }}</li>{%- endif -%}
+            {%- endif -%}
+          </ul>
+        </div>
+      </div>
+    </div>
+  {%- endif -%}
+</section>
+
+{%- comment -%} ============================ STYLES ============================ {%- endcomment -%}
+{%- style -%}
+  #cpi-{{ section.id }} {
+    --cpi-gap: 3rem;
+    --cpi-accent: {{ section.settings.accent_color | default: '#111111' }};
+    --cpi-ink: #111111;
+    --cpi-text: #1a1a1a;
+    --cpi-muted: #767676;
+    --cpi-line: #e6e6e6;
+    --cpi-border: #111111;
+    --cpi-surface: #f6f6f6;
+    --cpi-radius: 4px;
+    --cpi-radius-sm: 4px;
+    color: var(--cpi-text);
+    font-family: inherit;
+    -webkit-font-smoothing: antialiased;
+  }
+  #cpi-{{ section.id }} * { box-sizing: border-box; }
+  #cpi-{{ section.id }} .cpi__inner {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--cpi-gap);
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem;
+  }
+
+  /* ---------- Media / gallery ---------- */
+  #cpi-{{ section.id }} .cpi__media { position: relative; }
+  #cpi-{{ section.id }} .cpi__gallery {
+    display: flex;
+    flex-direction: column;   /* mobile: main image on top, thumbs below */
+    gap: .75rem;
+  }
+  #cpi-{{ section.id }} .cpi__stage {
+    order: 1;
+    border-radius: var(--cpi-radius);
+    overflow: hidden;
+    background: var(--cpi-surface);
+  }
+  #cpi-{{ section.id }} .cpi__stage img {
+    width: 100%;
+    height: auto;
+    display: block;
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+    transition: opacity .2s ease;
+  }
+  #cpi-{{ section.id }} .cpi__thumbs {
+    order: 2;                 /* thumbs at the bottom */
+    --cpi-thumb-count: 4;     /* mobile: 4 visible, rest scroll */
+    --cpi-thumb-gap: .55rem;
+    display: flex;
+    flex-direction: row;
+    gap: var(--cpi-thumb-gap);
+    padding-bottom: .35rem;
+    overflow-x: auto;
+    scroll-behavior: smooth;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+  #cpi-{{ section.id }} .cpi__thumb {
+    /* Exactly N thumbnails fit the visible area; extras scroll horizontally */
+    flex: 0 0 calc((100% - (var(--cpi-thumb-count) - 1) * var(--cpi-thumb-gap)) / var(--cpi-thumb-count));
+    aspect-ratio: 1 / 1;
+    padding: 0;
+    border: 1.5px solid var(--cpi-line);
+    border-radius: var(--cpi-radius-sm);
+    background: var(--cpi-surface);
+    cursor: pointer;
+    overflow: hidden;
+    scroll-snap-align: start;
+    transition: border-color .15s ease, transform .1s ease;
+  }
+  #cpi-{{ section.id }} .cpi__thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  #cpi-{{ section.id }} .cpi__thumb:hover { border-color: var(--cpi-muted); }
+  #cpi-{{ section.id }} .cpi__thumb:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(17,17,17,.18); }
+  #cpi-{{ section.id }} .cpi__thumb.is-active {
+    border-color: var(--cpi-ink);
+    border-width: 2px;
+  }
+  #cpi-{{ section.id }} .cpi__media-empty {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: var(--cpi-radius);
+    background: var(--cpi-surface);
+    display: grid;
+    place-items: center;
+    color: var(--cpi-muted);
+  }
+
+  /* ---------- Title & price ---------- */
+  #cpi-{{ section.id }} .cpi__title {
+    font-size: clamp(1.9rem, 1.3rem + 2vw, 2.7rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+    margin: 0 0 1rem;
+  }
+  #cpi-{{ section.id }} .cpi__price {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .6rem .75rem;
+    margin: 0 0 1.75rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--cpi-line);
+  }
+  #cpi-{{ section.id }} .cpi__price-current {
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--cpi-ink);
+  }
+  #cpi-{{ section.id }} [hidden] { display: none !important; }
+
+  /* ---------- Labels ---------- */
+  #cpi-{{ section.id }} .cpi__label {
+    display: block;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin-bottom: .7rem;
+  }
+  #cpi-{{ section.id }} .cpi__label-value {
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--cpi-muted);
+  }
+  #cpi-{{ section.id }} .cpi__option { margin-bottom: 1.4rem; }
+
+  /* ---------- Variant pills ---------- */
+  #cpi-{{ section.id }} .cpi__pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+  }
+  #cpi-{{ section.id }} .cpi__pill {
+    min-width: 3.6rem;
+    padding: .75rem 1.25rem;
+    border: 1.5px solid var(--cpi-line);
+    border-radius: var(--cpi-radius-sm);
+    background: #fff;
+    color: var(--cpi-text);
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, color .15s ease, transform .08s ease, box-shadow .15s ease;
+  }
+  #cpi-{{ section.id }} .cpi__pill:hover:not(.is-unavailable):not(.is-selected) {
+    border-color: var(--cpi-ink);
+    transform: translateY(-1px);
+  }
+  #cpi-{{ section.id }} .cpi__pill:active:not(.is-unavailable) { transform: translateY(0) scale(.98); }
+  #cpi-{{ section.id }} .cpi__pill:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(17,17,17,.18);
+  }
+  #cpi-{{ section.id }} .cpi__pill.is-selected {
+    background: var(--cpi-accent);
+    color: #fff;
+    border-color: var(--cpi-accent);
+    box-shadow: 0 4px 14px rgba(17,17,17,.18);
+  }
+  #cpi-{{ section.id }} .cpi__pill.is-unavailable {
+    color: #b5b5b5;
+    border-color: var(--cpi-line);
+    cursor: not-allowed;
+    background:
+      linear-gradient(to top left,
+        transparent calc(50% - .75px),
+        #c9c9c9 calc(50% - .75px),
+        #c9c9c9 calc(50% + .75px),
+        transparent calc(50% + .75px));
+  }
+
+  /* ---------- Quantity ---------- */
+  #cpi-{{ section.id }} .cpi__qty-control {
+    display: inline-flex;
+    align-items: center;
+    border: 1.5px solid var(--cpi-line);
+    border-radius: var(--cpi-radius-sm);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    transition: border-color .15s ease;
+  }
+  #cpi-{{ section.id }} .cpi__qty-control:focus-within { border-color: var(--cpi-ink); }
+  #cpi-{{ section.id }} .cpi__qty-btn {
+    width: 52px;
+    height: 54px;
+    border: 0;
+    background: #fff;
+    font-size: 1.5rem;
+    cursor: pointer;
+    line-height: 1;
+    color: var(--cpi-ink);
+    transition: background .15s ease;
+  }
+  #cpi-{{ section.id }} .cpi__qty-btn:hover { background: var(--cpi-surface); }
+  #cpi-{{ section.id }} .cpi__qty-btn:active { background: #ececec; }
+  #cpi-{{ section.id }} .cpi__qty-input {
+    width: 66px;
+    height: 54px;
+    text-align: center;
+    border: 0;
+    border-left: 1.5px solid var(--cpi-line);
+    border-right: 1.5px solid var(--cpi-line);
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--cpi-ink);
+    -moz-appearance: textfield;
+  }
+  #cpi-{{ section.id }} .cpi__qty-input:focus { outline: none; }
+  #cpi-{{ section.id }} .cpi__qty-input::-webkit-outer-spin-button,
+  #cpi-{{ section.id }} .cpi__qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+  /* ---------- Add to cart ---------- */
+  #cpi-{{ section.id }} .cpi__atc {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .6rem;
+    width: 100%;
+    padding: 1.15rem 1.5rem;
+    border: 1.5px solid var(--cpi-accent);
+    border-radius: var(--cpi-radius-sm);
+    background: var(--cpi-accent);
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    overflow: hidden;
+    transition: transform .1s ease, box-shadow .2s ease, background .2s ease, color .2s ease;
+  }
+  #cpi-{{ section.id }} .cpi__atc::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: #fff;
+    opacity: 0;
+    transition: opacity .2s ease;
+  }
+  #cpi-{{ section.id }} .cpi__atc:hover:not(:disabled) {
+    box-shadow: 0 8px 22px rgba(17,17,17,.22);
+    transform: translateY(-2px);
+  }
+  #cpi-{{ section.id }} .cpi__atc:hover:not(:disabled)::after { opacity: .12; }
+  #cpi-{{ section.id }} .cpi__atc:active:not(:disabled) { transform: translateY(0); }
+  #cpi-{{ section.id }} .cpi__atc > * { position: relative; z-index: 1; }
+  #cpi-{{ section.id }} .cpi__atc:disabled {
+    background: #fff;
+    color: var(--cpi-muted);
+    border-color: var(--cpi-line);
+    cursor: not-allowed;
+  }
+  #cpi-{{ section.id }} .cpi__atc.is-loading {
+    cursor: wait;
+    background: var(--cpi-accent);
+    color: #fff;
+    border-color: var(--cpi-accent);
+  }
+  #cpi-{{ section.id }} .cpi__atc.is-loading .cpi__atc-text::after {
+    content: '';
+    animation: cpi-dots 1.2s steps(1, end) infinite;
+  }
+  @keyframes cpi-dots {
+    0%   { content: ''; }
+    25%  { content: '.'; }
+    50%  { content: '..'; }
+    75%, 100% { content: '...'; }
+  }
+  #cpi-{{ section.id }} .cpi__atc.is-added {
+    background: #fff;
+    color: var(--cpi-ink);
+    border-color: var(--cpi-ink);
+  }
+  #cpi-{{ section.id }} .cpi__message {
+    margin: .85rem 0 0;
+    font-size: .88rem;
+    min-height: 1.2em;
+  }
+  #cpi-{{ section.id }} .cpi__message.is-error { color: #b00020; font-weight: 600; }
+  #cpi-{{ section.id }} .cpi__message.is-success { color: var(--cpi-ink); font-weight: 700; }
+
+  /* ---------- Why customers love ---------- */
+  #cpi-{{ section.id }} .cpi__love {
+    margin-top: 2rem;
+    padding: 1.6rem;
+    background: var(--cpi-surface);
+    border-radius: var(--cpi-radius);
+  }
+  #cpi-{{ section.id }} .cpi__love-title {
+    font-weight: 700;
+    letter-spacing: .02em;
+    margin: 0 0 1.1rem;
+  }
+  #cpi-{{ section.id }} .cpi__love-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: .9rem;
+  }
+  #cpi-{{ section.id }} .cpi__love-item {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    line-height: 1.5;
+    color: var(--cpi-text);
+  }
+  #cpi-{{ section.id }} .cpi__love-item::before {
+    content: "✓";
+    flex: 0 0 auto;
+    width: 1.5rem;
+    height: 1.5rem;
+    background: var(--cpi-accent);
+    color: #fff;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .8rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  #cpi-{{ section.id }} .cpi__placeholder {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--cpi-muted);
+    border: 1px dashed var(--cpi-line);
+    border-radius: var(--cpi-radius);
+    margin: 1rem;
+  }
+  #cpi-{{ section.id }} .visually-hidden {
+    position: absolute !important;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0);
+    white-space: nowrap; border: 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #cpi-{{ section.id }} * { transition: none !important; animation-duration: .001ms !important; }
+  }
+
+  /* Responsive: two columns from tablet up */
+  @media (min-width: 750px) {
+    #cpi-{{ section.id }} .cpi__inner {
+      grid-template-columns: 1fr 1fr;
+      align-items: start;
+      padding: 3.5rem 1.5rem;
+    }
+    #cpi-{{ section.id }} .cpi__media {
+      position: sticky;
+      top: 1.5rem;
+    }
+    /* Desktop: 6 thumbnails visible, rest scroll */
+    #cpi-{{ section.id }} .cpi__thumbs { --cpi-thumb-count: 6; }
+  }
+{%- endstyle -%}
+
+{%- comment -%} ============================ SCRIPT ============================ {%- endcomment -%}
+<script>
+  (function () {
+    var root = document.getElementById('cpi-{{ section.id }}');
+    if (!root) return;
+
+    var form        = root.querySelector('[data-cpi-form]');
+    if (!form) return;
+    var optionPills   = root.querySelectorAll('[data-cpi-option-index]');
+    var selectedLabels = root.querySelectorAll('[data-cpi-selected-value]');
+    var variantSelect = root.querySelector('[data-cpi-variant-select]');
+    var priceCurrent  = root.querySelector('[data-cpi-price-current]');
+    var atc         = root.querySelector('[data-cpi-atc]');
+    var atcText     = root.querySelector('[data-cpi-atc-text]');
+    var message     = root.querySelector('[data-cpi-message]');
+    var qtyInput    = root.querySelector('[data-cpi-qty]');
+    var qtyMinus    = root.querySelector('[data-cpi-qty-minus]');
+    var qtyPlus     = root.querySelector('[data-cpi-qty-plus]');
+
+    function setMessage(text, type) {
+      if (!message) return;
+      message.textContent = text || '';
+      message.className = 'cpi__message' + (type ? ' is-' + type : '');
+    }
+
+    // Refresh this (Halo/Ella) theme's cart UI: header count bubble + slide-out drawer.
+    function refreshThemeCart() {
+      if (window.Shopify && typeof Shopify.getCart === 'function') {
+        Shopify.getCart(function (cart) {
+          // Open the slide-out cart drawer (theme uses this body class)
+          document.body.classList.add('cart-sidebar-show');
+          if (window.sharedFunctions && typeof window.sharedFunctions.updateSidebarCart === 'function') {
+            // Re-renders the drawer AND updates the header [data-cart-count]
+            window.sharedFunctions.updateSidebarCart(cart);
+          } else {
+            // Fallback: at least update the header count bubble(s)
+            document.querySelectorAll('[data-cart-count]').forEach(function (el) {
+              el.textContent = cart.item_count;
+            });
+            document.dispatchEvent(new CustomEvent('cart-update', { detail: cart }));
+          }
+        });
+      } else {
+        // Last-resort fallback if theme globals are unavailable
+        fetch('{{ routes.cart_url }}.js', { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (cart) {
+            document.querySelectorAll('[data-cart-count]').forEach(function (el) {
+              el.textContent = cart.item_count;
+            });
+            document.dispatchEvent(new CustomEvent('cart-update', { detail: cart }));
+          });
+      }
+    }
+
+    /* ---------- Image gallery: thumbnail → main image ---------- */
+    var mainImg = root.querySelector('[data-cpi-main]');
+    root.querySelectorAll('[data-cpi-thumb]').forEach(function (thumb) {
+      thumb.addEventListener('click', function () {
+        if (!mainImg) return;
+        var full = thumb.getAttribute('data-cpi-full');
+        var full2x = thumb.getAttribute('data-cpi-full2x');
+        mainImg.style.opacity = '0';
+        var swap = function () {
+          mainImg.src = full;
+          mainImg.srcset = full + ' 700w, ' + (full2x || full) + ' 1400w';
+          mainImg.style.opacity = '1';
+          mainImg.removeEventListener('transitionend', swap);
+        };
+        mainImg.addEventListener('transitionend', swap);
+        // Fallback if transitionend doesn't fire
+        setTimeout(swap, 220);
+        root.querySelectorAll('[data-cpi-thumb]').forEach(function (t) { t.classList.remove('is-active'); });
+        thumb.classList.add('is-active');
+      });
+    });
+
+    /* ---------- Quantity stepper ---------- */
+    if (qtyMinus) qtyMinus.addEventListener('click', function () {
+      var v = parseInt(qtyInput.value, 10) || 1;
+      qtyInput.value = Math.max(1, v - 1);
+    });
+    if (qtyPlus) qtyPlus.addEventListener('click', function () {
+      var v = parseInt(qtyInput.value, 10) || 1;
+      qtyInput.value = v + 1;
+    });
+    // Clamp typed values to a minimum of 1
+    if (qtyInput) qtyInput.addEventListener('change', function () {
+      qtyInput.value = Math.max(1, parseInt(qtyInput.value, 10) || 1);
+    });
+
+    /* ---------- Currently chosen option values (one per option index) ---------- */
+    function chosenValues() {
+      var chosen = [];
+      root.querySelectorAll('.cpi__pill.is-selected').forEach(function (pill) {
+        chosen[parseInt(pill.getAttribute('data-cpi-option-index'), 10)] = pill.getAttribute('data-cpi-value');
+      });
+      return chosen;
+    }
+
+    // Find the hidden <option> matching a given set of chosen values.
+    function findVariant(chosen) {
+      if (!variantSelect) return null;
+      var match = null;
+      Array.prototype.forEach.call(variantSelect.options, function (opt) {
+        if (match) return;
+        var o1 = opt.getAttribute('data-cpi-option1');
+        var o2 = opt.getAttribute('data-cpi-option2');
+        var o3 = opt.getAttribute('data-cpi-option3');
+        var ok = (chosen[0] == null || chosen[0] === o1) &&
+                 (chosen[1] == null || chosen[1] === o2) &&
+                 (chosen[2] == null || chosen[2] === o3);
+        if (ok) match = opt;
+      });
+      return match;
+    }
+
+    /* ---------- Mark each pill available / unavailable (strike-through) ---------- */
+    function refreshAvailability() {
+      var chosen = chosenValues();
+      optionPills.forEach(function (pill) {
+        var idx = parseInt(pill.getAttribute('data-cpi-option-index'), 10);
+        // Test this pill's value combined with the other currently-chosen options.
+        var test = chosen.slice();
+        test[idx] = pill.getAttribute('data-cpi-value');
+        var v = findVariant(test);
+        var available = v && v.getAttribute('data-cpi-available') === 'true';
+        pill.classList.toggle('is-unavailable', !available);
+        pill.setAttribute('aria-disabled', available ? 'false' : 'true');
+      });
+    }
+
+    function onVariantChange() {
+      var opt = findVariant(chosenValues());
+      refreshAvailability();
+      if (!opt) {
+        if (atc) atc.disabled = true;
+        if (atcText) atcText.textContent = 'Unavailable';
+        setMessage('This combination is not available.', 'error');
+        return;
+      }
+      variantSelect.value = opt.value;
+      var available = opt.getAttribute('data-cpi-available') === 'true';
+
+      // Price (money markup is HTML → use innerHTML, not textContent)
+      if (priceCurrent) priceCurrent.innerHTML = opt.getAttribute('data-cpi-price');
+
+      if (atc) atc.disabled = !available;
+      if (atcText) atcText.textContent = available ? 'Add to cart' : 'Sold out';
+      setMessage('', '');
+    }
+
+    /* ---------- Pill click: select within its group ---------- */
+    optionPills.forEach(function (pill) {
+      pill.addEventListener('click', function () {
+        if (pill.classList.contains('is-unavailable')) return;
+        var idx = pill.getAttribute('data-cpi-option-index');
+        // Deselect siblings in the same option group, select this one.
+        root.querySelectorAll('.cpi__pill[data-cpi-option-index="' + idx + '"]').forEach(function (sib) {
+          sib.classList.remove('is-selected');
+          sib.setAttribute('aria-checked', 'false');
+        });
+        pill.classList.add('is-selected');
+        pill.setAttribute('aria-checked', 'true');
+        // Update the "Option: value" label
+        selectedLabels.forEach(function (lbl) {
+          if (lbl.getAttribute('data-cpi-selected-value') === idx) {
+            lbl.textContent = pill.getAttribute('data-cpi-value');
+          }
+        });
+        onVariantChange();
+      });
+    });
+
+    /* ---------- Add to cart (AJAX) with loading state + validation ---------- */
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      setMessage('', '');
+
+      // Bonus: validation — ensure a valid variant id is present
+      var idField = form.querySelector('[name="id"]');
+      if (!idField || !idField.value) {
+        setMessage('Please select an available option before adding to cart.', 'error');
+        return;
+      }
+      if (variantSelect) {
+        var opt = variantSelect.options[variantSelect.selectedIndex];
+        if (opt && opt.disabled) {
+          setMessage('Selected option is sold out.', 'error');
+          return;
+        }
+      }
+
+      // Loading state → button reads "Adding" with animated dots
+      atc.classList.add('is-loading');
+      atc.disabled = true;
+      if (atcText) atcText.textContent = 'Adding';
+
+      fetch('{{ routes.cart_add_url }}.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({
+          id: idField.value,
+          quantity: Math.max(1, parseInt(qtyInput.value, 10) || 1)
+        })
+      })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          if (!res.ok) throw data;
+          return data;
+        });
+      })
+      .then(function () {
+        setMessage('Added to cart', 'success');
+        // Success confirmation on the button itself
+        atc.classList.remove('is-loading');
+        atc.classList.add('is-added');
+        if (atcText) atcText.textContent = 'Added ✓';
+        setTimeout(function () {
+          atc.classList.remove('is-added');
+          if (atcText) atcText.textContent = 'Add to cart';
+        }, 1800);
+        refreshThemeCart();
+      })
+      .catch(function (err) {
+        atc.classList.remove('is-loading');
+        if (atcText) atcText.textContent = 'Add to cart';
+        setMessage((err && err.description) ? err.description : 'Could not add to cart. Please try again.', 'error');
+      })
+      .finally(function () {
+        atc.classList.remove('is-loading');
+        atc.disabled = false;
+      });
+    });
+
+    // Initialise state on load
+    if (variantSelect) onVariantChange();
+  })();
+</script>
+
+{%- comment -%} ============================ SCHEMA ============================ {%- endcomment -%}
+{% schema %}
+{
+  "name": "Custom Product Info",
+  "tag": "section",
+  "class": "section-custom-product-info",
+  "settings": [
+    {
+      "type": "header",
+      "content": "Product"
+    },
+    {
+      "type": "product",
+      "id": "product",
+      "label": "Product",
+      "info": "On a product template this can be left empty to use the current product."
+    },
+    {
+      "type": "color",
+      "id": "accent_color",
+      "label": "Accent color",
+      "default": "#000000"
+    },
+    {
+      "type": "header",
+      "content": "Why Customers Love This Product"
+    },
+    {
+      "type": "text",
+      "id": "love_title",
+      "label": "Block title",
+      "default": "Why Customers Love This Product"
+    },
+    {
+      "type": "text",
+      "id": "love_point_1",
+      "label": "Bullet point 1",
+      "default": "Clinically tested, dermatologist-approved formula."
+    },
+    {
+      "type": "text",
+      "id": "love_point_2",
+      "label": "Bullet point 2",
+      "default": "Made with clean, cruelty-free ingredients."
+    },
+    {
+      "type": "text",
+      "id": "love_point_3",
+      "label": "Bullet point 3",
+      "default": "Loved by 50,000+ happy customers."
+    },
+    {
+      "type": "header",
+      "content": "Metafield source (optional)"
+    },
+    {
+      "type": "checkbox",
+      "id": "use_metafield",
+      "label": "Use product metafield for the bullet points",
+      "info": "When on, the list metafield below is rendered (all items, max 3). Falls back to the three text fields above if the metafield is empty.",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "metafield_namespace",
+      "label": "Metafield namespace",
+      "default": "custom"
+    },
+    {
+      "type": "text",
+      "id": "metafield_key",
+      "label": "Metafield key",
+      "info": "Must be a 'List of single line text' metafield. Default: custom.love_points",
+      "default": "love_points"
+    }
+  ],
+  "presets": [
+    {
+      "name": "Custom Product Info"
+    }
+  ]
+}
+{% endschema %}
